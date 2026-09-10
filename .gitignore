@@ -16,3 +16,5 @@ accounts.txt
 # Automation profile data
 chrome_automation_profile/
 user_data/
+okta_session/
+session.json
