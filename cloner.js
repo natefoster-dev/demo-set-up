@@ -25,9 +25,15 @@ if (!CORE_CLIENT_ID || !CORE_CLIENT_SECRET || !DEMO_CLIENT_ID || !DEMO_CLIENT_SE
     process.exit(1);
 }
 
-// CONFIGURABLE CONTROL PANEL: Change this number to alter the loop iterations performed
-const targetLoops = 5;
-const reservationsPerListing = 3;   // Advanced Change: Number of staggered reservations to build PER listing
+// ==========================================
+// CONFIGURABLE CONTROL PANEL
+// ==========================================
+const cloneAllListings = false;      // true = clone all active listings (ignores targetLoops), false = use targetLoops limit
+const targetLoops = 5;              // Number of listings to clone (only used if cloneAllListings is false)
+const reservationsPerListing = 10;   // Staggered reservations per listing (set to 0 to skip reservations)
+const createTaskPerListing = false;   // true = create verification task for each listing, false = skip task creation
+const useOriginalTitle = false;     // true = retain Core listing title, false = generate random title
+const useOriginalNickname = false;  // true = retain Core listing nickname, false = generate random nickname
 
 // File token paths for local storage caching
 const CORE_TOKEN_FILE = path.join(__dirname, '.token_cache_core.json');
@@ -143,18 +149,40 @@ async function runSandboxSetup() {
         coreClient.defaults.headers.common['Authorization'] = `Bearer ${coreToken}`;
         demoClient.defaults.headers.common['Authorization'] = `Bearer ${demoToken}`;
 
-        console.log(`📦 Fetching complete source listing details from Core...`);
-        const coreListingsRes = await coreClient.get(`/listings?active=true&limit=${targetLoops}`);
-        const coreListings = coreListingsRes.data.results;
+        let coreListings = [];
+
+        if (cloneAllListings) {
+            console.log(`📦 Fetching ALL active source listings from Core using pagination...`);
+            let skip = 0;
+            const limit = 50;
+            let hasMore = true;
+
+            while (hasMore) {
+                const res = await coreClient.get(`/listings?active=true&limit=${limit}&skip=${skip}`);
+                const fetched = res.data.results || [];
+                coreListings = coreListings.concat(fetched);
+                
+                if (fetched.length < limit) {
+                    hasMore = false;
+                } else {
+                    skip += limit;
+                }
+            }
+        } else {
+            console.log(`📦 Fetching target ${targetLoops} active source listing details from Core...`);
+            const coreListingsRes = await coreClient.get(`/listings?active=true&limit=${targetLoops}`);
+            coreListings = coreListingsRes.data.results || [];
+        }
 
         if (coreListings.length === 0) throw new Error("No active listings found in Core account.");
 
-        const loops = Math.min(coreListings.length, targetLoops);
+        const loops = cloneAllListings ? coreListings.length : Math.min(coreListings.length, targetLoops);
+        console.log(`📋 Total properties queued to clone: ${loops}`);
 
         for (let i = 0; i < loops; i++) {
             const sourceListing = coreListings[i];
             
-            // RANDOMIZED TITLE ENGINE GENERATION
+            // TITLE GENERATION LOGIC
             const titlePool = [
                 'Chic Urban Escape', 'Luxurious Midtown Suite', 'Modern Downtown Loft', 
                 'Cozy Metro Flat', 'Premium Central Stay', 'Elegant City Sanctuary', 
@@ -164,11 +192,16 @@ async function runSandboxSetup() {
             const uniqueRandomSuffix = faker.string.alphanumeric({ length: 4, casing: 'upper' });
             const finalRandomizedTitle = `${baseRandomTitle} ${uniqueRandomSuffix}`;
 
+            // NICKNAME GENERATION LOGIC
             const legacyLetterTag = faker.string.alpha({ length: 1, casing: 'upper' });
             const legacyNumberTag = faker.number.int({ min: 1, max: 10 });
             const compliantLegacyNickname = `Guesty Test Listing ${legacyLetterTag}${legacyNumberTag}`;
 
-            console.log(`\n--- 🔄 Deep Cloning Property ${i + 1} of ${loops}: Title: "${finalRandomizedTitle}" ---`);
+            // DECISION LOGIC BASED ON CONTROL PANEL CONFIG
+            const finalTitle = (useOriginalTitle && sourceListing.title) ? sourceListing.title : finalRandomizedTitle;
+            const finalNickname = (useOriginalNickname && sourceListing.nickname) ? sourceListing.nickname : compliantLegacyNickname;
+
+            console.log(`\n--- 🔄 Deep Cloning Property ${i + 1} of ${loops}: Title: "${finalTitle}" ---`);
             
             if (i > 0) {
                 console.log(`⏳ Loop Interval: Pausing 3 seconds to keep API limits clean...`);
@@ -182,8 +215,8 @@ async function runSandboxSetup() {
 
             // 1. DUPLICATE LISTING DATA SCHEMATICS
             const listingPayload = {
-                title: finalRandomizedTitle,
-                nickname: compliantLegacyNickname, 
+                title: finalTitle,
+                nickname: finalNickname, 
                 
                 type: "SINGLE", 
                 active: true,
@@ -231,13 +264,15 @@ async function runSandboxSetup() {
             console.log(`✅ Duplicated Property Entity [Status: CLEAN] -> Demo ID: ${newListingId}`);
 
             // 2. CREATE A TASK
-            const taskPayload = {
-                title: "Pre-arrival Sandbox Verification Inspection",
-                listingId: newListingId,
-                status: "pending" 
-            };
-            await demoClient.post('/tasks', taskPayload);
-            console.log(`✅ Created Task for Listing`);
+            if (createTaskPerListing) {
+                const taskPayload = {
+                    title: "Pre-arrival Sandbox Verification Inspection",
+                    listingId: newListingId,
+                    status: "pending" 
+                };
+                await demoClient.post('/tasks', taskPayload);
+                console.log(`✅ Created Task for Listing`);
+            }
 
             console.log(`⏳ Syncing with Guesty calendar server...`);
             await delay(2000);
@@ -246,12 +281,12 @@ async function runSandboxSetup() {
             let calendarSearchPointer = new Date();
             calendarSearchPointer.setDate(calendarSearchPointer.getDate() + 1);
 
-            // FIXED: Restored complete valid stay distribution array mapping
             const stayLengthDistribution = [1, 2, 3, 4, 5];
 
-            console.log(`📡 Spawning ${reservationsPerListing} staggered reservations for this property...`);
+            if (reservationsPerListing > 0) {
+                console.log(`📡 Spawning ${reservationsPerListing} staggered reservations for this property...`);
+            }
             
-            // FIXED: Restored complete closed loop declaration layer boundary block
             for (let r = 0; r < reservationsPerListing; r++) {
                 const chosenLengthOfStay = stayLengthDistribution[Math.floor(Math.random() * stayLengthDistribution.length)];
                 const dates = await getNextValidBookingDates(newListingId, demoClient, calendarSearchPointer, chosenLengthOfStay);

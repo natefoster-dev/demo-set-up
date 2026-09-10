@@ -4,16 +4,22 @@
   "description": "",
   "main": "cloner.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "demo-init": "node initializer.js",
+    "init": "node initializer.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@faker-js/faker": "^10.4.0",
-    "axios": "^1.18.0",
+    "@faker-js/faker": "^10.6.0",
+    "axios": "^1.19.0",
+    "dotenv": "^17.4.2",
     "otplib": "^13.4.1",
     "playwright": "^1.61.0"
+  },
+  "bin": {
+    "demo-init": "bin/demo-init"
   }
 }
