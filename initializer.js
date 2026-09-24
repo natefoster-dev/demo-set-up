@@ -2,7 +2,7 @@ const axios = require('axios');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const { promisify } = require('util');
 const { createInterface } = require('readline/promises');
 const { stdin, stdout } = require('process');
@@ -176,6 +176,32 @@ async function getBearerTokenFromOpenChrome() {
   }
 }
 
+/**
+ * Runs cloner.js with pasted Open API bearer tokens (skips CLIENT_ID/SECRET oauth).
+ */
+function runClonerWithBearerTokens(cloneFromToken, cloneToToken) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [path.join(__dirname, 'cloner.js')], {
+      cwd: __dirname,
+      env: {
+        ...process.env,
+        CORE_BEARER_TOKEN: cloneFromToken,
+        DEMO_BEARER_TOKEN: cloneToToken,
+      },
+      stdio: 'inherit',
+    });
+
+    child.on('error', reject);
+    child.on('exit', (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`Cloner exited with code ${code == null ? 'unknown' : code}`));
+      }
+    });
+  });
+}
+
 async function main() {
   const rl = createInterface({ input: stdin, output: stdout });
 
@@ -240,6 +266,21 @@ async function main() {
         }
       }
       console.log(`\nPlease check ${email} to verify and finalise the account setup process.`);
+
+      console.log('\n--- Clone listings into the new account ---');
+      console.log(
+        'After email verification, paste Open API bearer tokens for the source account and the new demo account.\n'
+      );
+      const cloneFromToken = await promptRequired(rl, 'Clone-from account bearer token');
+      const cloneToToken = await promptRequired(rl, 'New account bearer token');
+
+      console.log('\nStarting cloner...\n');
+      rl.pause();
+      try {
+        await runClonerWithBearerTokens(cloneFromToken, cloneToToken);
+      } finally {
+        rl.resume();
+      }
     } else {
       console.error(`\n❌ Signup failed (HTTP ${response.status}).`);
       const errPayload = response.data;

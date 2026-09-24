@@ -47,19 +47,30 @@ node initializer.js
 demo-init
 ```
 
-You will be prompted for:
+End-to-end prompts:
 
 1. Company name  
 2. Company address (free text is fine; Google Places is UI-only)  
 3. Zip code  
 4. First name  
 5. Last name  
-6. Email (verification is sent here)
+6. Email (verification is sent here)  
+7. Show full API response? `[y/N]` (skipped if you pass `--verbose`)  
+8. **Clone-from account bearer token** (source / Core Open API token)  
+9. **New account bearer token** (destination / just-created account Open API token)
 
-On success (`200` or `201`), the CLI prints a short summary and asks you to check email to verify and finalise account setup. It then asks whether to show the full API response (default **no**).
+On signup success (`200` or `201`), the CLI prints a short summary and:
+
+```
+Please check {email} to verify and finalise the account setup process.
+```
+
+Then it asks for the two Open API bearer tokens and runs `cloner.js` to copy listings/reservations into the new account.
+
+**Before step 8–9:** verify the new account email and create its Open API app (Integrations → OAuth / API) so you have a destination bearer token. The CLI waits at those prompts until you paste them.
 
 ```bash
-demo-init --verbose   # always print the full API JSON
+demo-init --verbose   # always print the full signup API JSON
 ```
 
 Dry-run auth only (no account created):
@@ -85,7 +96,7 @@ Skill name: **`guesty-demo-init`**
 - Project: `.cursor/skills/guesty-demo-init/SKILL.md`
 - Personal (if installed): `~/.cursor/skills/guesty-demo-init/SKILL.md`
 
-Use when asking the agent to create / register / initialize a Guesty Pro demo account, or to run `demo-init`. The skill collects the same six fields, runs the CLI, and reminds you to check email. A future Slack `/demo-init` can reuse the same inputs (Slack will need its own auth path — not Chrome AppleScript).
+Use when asking the agent to create / register / initialize a Guesty Pro demo account, or to run `demo-init`. The skill collects the signup fields, then the two clone bearer tokens, runs signup + cloner, and reminds you to check email. A future Slack `/demo-init` can reuse the same inputs (Slack will need its own auth path — not Chrome AppleScript).
 
 ---
 
@@ -93,7 +104,24 @@ Use when asking the agent to create / register / initialize a Guesty Pro demo ac
 
 Clones listings (and related data) from a **Core** source account into a **Demo** destination account using the Guesty Open API.
 
-### Step 1: Configure API credentials
+### Auth options
+
+**A. Bearer tokens** (used by `demo-init` after signup):
+
+```bash
+CORE_BEARER_TOKEN=... DEMO_BEARER_TOKEN=... node cloner.js
+```
+
+**B. Client credentials** via `.env` (standalone cloner runs):
+
+```
+CORE_CLIENT_ID=...
+CORE_CLIENT_SECRET=...
+DEMO_CLIENT_ID=...
+DEMO_CLIENT_SECRET=...
+```
+
+### Step 1: Configure API credentials (client-credentials mode)
 
 Create a `.env` file in the project root (see `.env.example`):
 
@@ -112,12 +140,12 @@ DEMO_CLIENT_SECRET=your_demo_client_secret_here
 
 ### Step 2: Local token caching
 
-On run, Open API bearer tokens are cached locally:
+On run with client credentials, Open API bearer tokens are cached locally:
 
 - `.token_cache_core.json`
 - `.token_cache_demo.json`
 
-These are created automatically, reused until expiry, and gitignored.
+These are created automatically, reused until expiry, and gitignored. Bearer-token mode skips this cache.
 
 ### Step 3: Configure cloner parameters (optional)
 

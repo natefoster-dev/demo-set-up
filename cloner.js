@@ -11,17 +11,27 @@ const crypto = require('crypto');
 // ==========================================
 const BASE_URL = 'https://open-api.guesty.com/v1';
 
-// CORE ACCOUNT (Source)
+// CORE ACCOUNT (Source) — Open API client credentials OR a pasted bearer token
 const CORE_CLIENT_ID = process.env.CORE_CLIENT_ID;
 const CORE_CLIENT_SECRET = process.env.CORE_CLIENT_SECRET;
+const CORE_BEARER_TOKEN =
+    process.env.CORE_BEARER_TOKEN || process.env.CLONE_FROM_BEARER_TOKEN;
 
 // DEMO ACCOUNT (Destination)
 const DEMO_CLIENT_ID = process.env.DEMO_CLIENT_ID;
 const DEMO_CLIENT_SECRET = process.env.DEMO_CLIENT_SECRET;
+const DEMO_BEARER_TOKEN =
+    process.env.DEMO_BEARER_TOKEN || process.env.CLONE_TO_BEARER_TOKEN;
 
-// Guard check: Validate credentials before executing
-if (!CORE_CLIENT_ID || !CORE_CLIENT_SECRET || !DEMO_CLIENT_ID || !DEMO_CLIENT_SECRET) {
-    console.error("❌ Missing required CORE or DEMO credentials in environment variables.");
+const hasBearerPair = Boolean(CORE_BEARER_TOKEN && DEMO_BEARER_TOKEN);
+const hasCredsPair = Boolean(
+    CORE_CLIENT_ID && CORE_CLIENT_SECRET && DEMO_CLIENT_ID && DEMO_CLIENT_SECRET
+);
+
+if (!hasBearerPair && !hasCredsPair) {
+    console.error(
+        '❌ Missing auth. Provide CORE_BEARER_TOKEN + DEMO_BEARER_TOKEN, or CORE/DEMO CLIENT_ID + CLIENT_SECRET.'
+    );
     process.exit(1);
 }
 
@@ -140,11 +150,31 @@ const getNextValidBookingDates = async (listingId, demoClient, currentSearchStar
 // ==========================================
 // 2. MAIN DEEP CLONING ENGINE
 // ==========================================
+async function resolveAccountTokens() {
+    if (hasBearerPair) {
+        console.log('🔐 Using provided bearer tokens for Core and Demo accounts...');
+        return { coreToken: CORE_BEARER_TOKEN.trim(), demoToken: DEMO_BEARER_TOKEN.trim() };
+    }
+
+    console.log('🔐 Initializing Identity Credentials from CLIENT_ID / CLIENT_SECRET...');
+    const coreToken = await getCachedOrFreshToken(
+        CORE_CLIENT_ID,
+        CORE_CLIENT_SECRET,
+        CORE_TOKEN_FILE,
+        'Core Account'
+    );
+    const demoToken = await getCachedOrFreshToken(
+        DEMO_CLIENT_ID,
+        DEMO_CLIENT_SECRET,
+        DEMO_TOKEN_FILE,
+        'Demo Account'
+    );
+    return { coreToken, demoToken };
+}
+
 async function runSandboxSetup() {
     try {
-        console.log("🔐 Initializing Identity Credentials...");
-        const coreToken = await getCachedOrFreshToken(CORE_CLIENT_ID, CORE_CLIENT_SECRET, CORE_TOKEN_FILE, 'Core Account');
-        const demoToken = await getCachedOrFreshToken(DEMO_CLIENT_ID, DEMO_CLIENT_SECRET, DEMO_TOKEN_FILE, 'Demo Account');
+        const { coreToken, demoToken } = await resolveAccountTokens();
 
         coreClient.defaults.headers.common['Authorization'] = `Bearer ${coreToken}`;
         demoClient.defaults.headers.common['Authorization'] = `Bearer ${demoToken}`;
