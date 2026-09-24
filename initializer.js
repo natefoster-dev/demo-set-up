@@ -278,6 +278,8 @@ async function main() {
       rl.pause();
       try {
         await runClonerWithBearerTokens(cloneFromToken, cloneToToken);
+        console.log('\n✅ demo-init completed — account created and cloner finished.');
+        console.log(`Remember to verify ${email} if you have not already.`);
       } finally {
         rl.resume();
       }
