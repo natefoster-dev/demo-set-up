@@ -2,10 +2,12 @@ const axios = require('axios');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFile, spawn } = require('child_process');
+const { spawn, execFile } = require('child_process');
 const { promisify } = require('util');
 const { createInterface } = require('readline/promises');
 const { stdin, stdout } = require('process');
+
+require('dotenv').config();
 
 const execFileAsync = promisify(execFile);
 
@@ -177,16 +179,17 @@ async function getBearerTokenFromOpenChrome() {
 }
 
 /**
- * Runs cloner.js with pasted Open API bearer tokens (skips CLIENT_ID/SECRET oauth).
+ * Runs cloner.js with Core credentials from .env and Demo credentials from prompts.
+ * Bearer tokens are fetched/cached inside cloner (up to 12 hours).
  */
-function runClonerWithBearerTokens(cloneFromToken, cloneToToken) {
+function runClonerWithDemoCredentials(demoClientId, demoClientSecret) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [path.join(__dirname, 'cloner.js')], {
       cwd: __dirname,
       env: {
         ...process.env,
-        CORE_BEARER_TOKEN: cloneFromToken,
-        DEMO_BEARER_TOKEN: cloneToToken,
+        DEMO_CLIENT_ID: demoClientId,
+        DEMO_CLIENT_SECRET: demoClientSecret,
       },
       stdio: 'inherit',
     });
@@ -267,17 +270,26 @@ async function main() {
       }
       console.log(`\nPlease check ${email} to verify and finalise the account setup process.`);
 
+      if (!process.env.CORE_CLIENT_ID || !process.env.CORE_CLIENT_SECRET) {
+        throw new Error(
+          'CORE_CLIENT_ID / CORE_CLIENT_SECRET missing in .env. Add Core (clone-from) Open API credentials before cloning.'
+        );
+      }
+
       console.log('\n--- Clone listings into the new account ---');
       console.log(
-        'After email verification, paste Open API bearer tokens for the source account and the new demo account.\n'
+        'Core (clone-from) uses CORE_CLIENT_ID / CORE_CLIENT_SECRET from .env; bearer tokens are fetched and cached under the hood (12h).'
       );
-      const cloneFromToken = await promptRequired(rl, 'Clone-from account bearer token');
-      const cloneToToken = await promptRequired(rl, 'New account bearer token');
+      console.log(
+        'After email verification, create an Open API app on the new account and paste its client credentials.\n'
+      );
+      const demoClientId = await promptRequired(rl, 'New account client ID');
+      const demoClientSecret = await promptRequired(rl, 'New account client secret');
 
       console.log('\nStarting cloner...\n');
       rl.pause();
       try {
-        await runClonerWithBearerTokens(cloneFromToken, cloneToToken);
+        await runClonerWithDemoCredentials(demoClientId, demoClientSecret);
         console.log('\n✅ demo-init completed — account created and cloner finished.');
         console.log(`Remember to verify ${email} if you have not already.`);
       } finally {

@@ -11,27 +11,20 @@ const crypto = require('crypto');
 // ==========================================
 const BASE_URL = 'https://open-api.guesty.com/v1';
 
-// CORE ACCOUNT (Source) — Open API client credentials OR a pasted bearer token
+// CORE ACCOUNT (Source) — always from local .env
 const CORE_CLIENT_ID = process.env.CORE_CLIENT_ID;
 const CORE_CLIENT_SECRET = process.env.CORE_CLIENT_SECRET;
-const CORE_BEARER_TOKEN =
-    process.env.CORE_BEARER_TOKEN || process.env.CLONE_FROM_BEARER_TOKEN;
 
-// DEMO ACCOUNT (Destination)
+// DEMO ACCOUNT (Destination) — from .env (standalone) or env passed by demo-init
 const DEMO_CLIENT_ID = process.env.DEMO_CLIENT_ID;
 const DEMO_CLIENT_SECRET = process.env.DEMO_CLIENT_SECRET;
-const DEMO_BEARER_TOKEN =
-    process.env.DEMO_BEARER_TOKEN || process.env.CLONE_TO_BEARER_TOKEN;
 
-const hasBearerPair = Boolean(CORE_BEARER_TOKEN && DEMO_BEARER_TOKEN);
-const hasCredsPair = Boolean(
-    CORE_CLIENT_ID && CORE_CLIENT_SECRET && DEMO_CLIENT_ID && DEMO_CLIENT_SECRET
-);
-
-if (!hasBearerPair && !hasCredsPair) {
-    console.error(
-        '❌ Missing auth. Provide CORE_BEARER_TOKEN + DEMO_BEARER_TOKEN, or CORE/DEMO CLIENT_ID + CLIENT_SECRET.'
-    );
+if (!CORE_CLIENT_ID || !CORE_CLIENT_SECRET) {
+    console.error('❌ Missing CORE_CLIENT_ID / CORE_CLIENT_SECRET in .env (clone-from / Core account).');
+    process.exit(1);
+}
+if (!DEMO_CLIENT_ID || !DEMO_CLIENT_SECRET) {
+    console.error('❌ Missing DEMO_CLIENT_ID / DEMO_CLIENT_SECRET (new / target account).');
     process.exit(1);
 }
 
@@ -44,6 +37,9 @@ const reservationsPerListing = 10;   // Staggered reservations per listing (set 
 const createTaskPerListing = false;   // true = create verification task for each listing, false = skip task creation
 const useOriginalTitle = false;     // true = retain Core listing title, false = generate random title
 const useOriginalNickname = false;  // true = retain Core listing nickname, false = generate random nickname
+
+// Reuse Open API tokens for 12 hours, then fetch a fresh one with client credentials
+const TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 
 // File token paths for local storage caching
 const CORE_TOKEN_FILE = path.join(__dirname, '.token_cache_core.json');
@@ -76,7 +72,8 @@ async function getCachedOrFreshToken(clientId, clientSecret, cacheFilePath, acco
             const cache = JSON.parse(fs.readFileSync(cacheFilePath, 'utf8'));
             const bufferTime = 60 * 1000;
             if (cache.credsHash === currentCredsHash && Date.now() < (cache.expiresAt - bufferTime)) {
-                console.log(`💾 Using cached Bearer token for [${accountLabel}]`);
+                const hoursLeft = ((cache.expiresAt - Date.now()) / (60 * 60 * 1000)).toFixed(1);
+                console.log(`💾 Using cached Bearer token for [${accountLabel}] (~${hoursLeft}h left)`);
                 return cache.token;
             }
         } catch (e) {}
@@ -90,11 +87,17 @@ async function getCachedOrFreshToken(clientId, clientSecret, cacheFilePath, acco
     }, { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
 
     const token = response.data.access_token;
-    const expiresInMs = (response.data.expires_in || 3600) * 1000; 
-    
-    const cacheData = { token: token, expiresAt: Date.now() + expiresInMs, credsHash: currentCredsHash };
+    // Prefer API expiry, but refresh at least every 12 hours per project policy
+    const apiExpiresMs = (response.data.expires_in || 43200) * 1000;
+    const expiresInMs = Math.min(apiExpiresMs, TOKEN_TTL_MS);
+
+    const cacheData = {
+        token,
+        expiresAt: Date.now() + expiresInMs,
+        credsHash: currentCredsHash,
+    };
     fs.writeFileSync(cacheFilePath, JSON.stringify(cacheData, null, 2), 'utf8');
-    
+
     return token;
 }
 
@@ -151,12 +154,7 @@ const getNextValidBookingDates = async (listingId, demoClient, currentSearchStar
 // 2. MAIN DEEP CLONING ENGINE
 // ==========================================
 async function resolveAccountTokens() {
-    if (hasBearerPair) {
-        console.log('🔐 Using provided bearer tokens for Core and Demo accounts...');
-        return { coreToken: CORE_BEARER_TOKEN.trim(), demoToken: DEMO_BEARER_TOKEN.trim() };
-    }
-
-    console.log('🔐 Initializing Identity Credentials from CLIENT_ID / CLIENT_SECRET...');
+    console.log('🔐 Resolving Open API bearer tokens from client credentials (cached up to 12h)...');
     const coreToken = await getCachedOrFreshToken(
         CORE_CLIENT_ID,
         CORE_CLIENT_SECRET,

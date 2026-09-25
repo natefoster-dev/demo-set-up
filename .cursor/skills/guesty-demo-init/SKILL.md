@@ -2,123 +2,77 @@
 name: guesty-demo-init
 description: >-
   Creates a Guesty for Pro demo account via the Admin signup API (demo-init CLI),
-  then prompts for clone-from and new-account Open API bearer tokens and runs the
-  cloner. Use when the user asks to create, register, spin up, or initialize a
-  Guesty Pro / EMEA demo account, run demo-init, or prepare signup for a future
-  Slack slash command.
+  then prompts for the new account Open API client ID/secret and runs the cloner.
+  Core (clone-from) credentials come from .env; bearer tokens are cached under the
+  hood for 12 hours. Use when creating, registering, or initializing a Guesty Pro
+  / EMEA demo account, or preparing a future Slack slash command.
 ---
 
 # Guesty demo-init
 
 Create a **Guesty for Pro** demo account through
-`POST https://admin.guesty.com/api/admin/accounts/signup` using the local
-`demo-init` CLI, then clone listings/reservations into that account via `cloner.js`.
-
-## When to use
-
-- User wants a new demo / Pro registration account (optionally with cloned data)
-- User says `demo-init`, “initialize demo”, “create Pro account”, “signup via admin”
-- Planning a Slack `/demo-init` (or similar) that wraps the same flow
+`POST https://admin.guesty.com/api/admin/accounts/signup`, then clone
+listings/reservations via `cloner.js`.
 
 ## Prerequisites
 
-1. Repo: `/Users/nate.foster/Documents/DEMO_SET_UP` (`npm install` once).
-2. CLI on PATH: `demo-init` → `~/.local/bin/demo-init` (or `npm run demo-init` in repo).
-3. **Google Chrome** open and logged into Guesty Admin (Okta).
-4. Chrome setting enabled: **View → Developer → Allow JavaScript from Apple Events**.
-
-Signup auth is the employee Okta token from the open Chrome tab — not Open API
-`CLIENT_ID` / `CLIENT_SECRET`. Cloning uses separate **Open API bearer tokens**
-the user pastes after signup.
+1. Repo with `npm install`.
+2. `.env` has **Core** Open API credentials:
+   - `CORE_CLIENT_ID`
+   - `CORE_CLIENT_SECRET`
+3. Chrome logged into Guesty Admin (Okta) + **Allow JavaScript from Apple Events**.
+4. CLI: `demo-init` on PATH or `npm run demo-init`.
 
 ## Required inputs
 
-| Prompt order | Field | Notes |
+| Order | Field | Notes |
 |---|---|---|
-| 1 | Company name | → `companyInformation.name` |
-| 2 | Company address | Free text OK (Google Places is UI-only) |
-| 3 | Zip code | |
-| 4 | First name | Account owner profile |
-| 5 | Last name | |
-| 6 | Email | Verification email is sent here |
-| 7 | Show full API response? | Default **n** (or use `--verbose`) |
-| 8 | Clone-from account bearer token | Open API token for source / Core |
-| 9 | New account bearer token | Open API token for the just-created demo |
+| 1–6 | Company + profile | name, address, zip, first, last, email |
+| 7 | Show full API response? | Default **n** |
+| 8 | New account client ID | Open API app on the new account |
+| 9 | New account client secret | |
 
-**Not prompted (fixed today):**
+**Not prompted:** Core credentials (`.env`), phone/`INDIVIDUAL`/vat/`IL`/`Tel Aviv-Yafo`.
 
-- `phone`: `""` (optional in Admin UI)
-- `businessType`: `INDIVIDUAL`
-- `vatNum`: `""`
-- `country`: `IL`
-- `city`: `Tel Aviv-Yafo`
+After check-email: user must verify email and create an Open API app on the new
+account before pasting client ID/secret.
 
-If the real company is outside IL/Tel Aviv, warn that hardcoded geo may be wrong
-for tax, and offer to update the script before signup.
+## Auth model (cloner)
 
-After the check-email message, remind the user to **verify email** and create Open
-API credentials on the new account before pasting the destination bearer token.
+- **Core:** `CORE_CLIENT_ID` / `CORE_CLIENT_SECRET` from `.env` always.
+- **Demo:** prompted client ID/secret (or `.env` for standalone cloner).
+- Bearer tokens fetched via Guesty OAuth `client_credentials`, cached locally
+  (`.token_cache_*.json`) and reused for up to **12 hours**.
 
 ## How to run
-
-### Interactive (preferred for local humans)
 
 ```bash
 demo-init
 ```
 
-Optional: `demo-init --verbose` (or `-v`) to always print the full signup API JSON.
-
-### Agent-assisted (non-interactive pipe)
+Piped (agent-assisted):
 
 ```bash
 printf '%s\n' \
-  "$COMPANY_NAME" \
-  "$COMPANY_ADDRESS" \
-  "$ZIP_CODE" \
-  "$FIRST_NAME" \
-  "$LAST_NAME" \
-  "$EMAIL" \
+  "$COMPANY_NAME" "$COMPANY_ADDRESS" "$ZIP_CODE" \
+  "$FIRST_NAME" "$LAST_NAME" "$EMAIL" \
   "n" \
-  "$CLONE_FROM_BEARER" \
-  "$CLONE_TO_BEARER" | demo-init
+  "$DEMO_CLIENT_ID" "$DEMO_CLIENT_SECRET" | demo-init
 ```
 
-Dry-run Admin auth only (no account created, no cloner):
+## Success
 
-```bash
-node dry-run-auth.js
-```
-
-Standalone cloner with bearer tokens:
-
-```bash
-CORE_BEARER_TOKEN=... DEMO_BEARER_TOKEN=... node cloner.js
-```
-
-## Success / failure
-
-- **Signup success:** HTTP `200` or `201`. Remind user to check email to finalise setup.
-- Do **not** dump the full signup body unless asked / `--verbose` / yes at prompt.
-- **Then** collect the two Open API bearer tokens and run `cloner.js` (stdio inherited).
-- **Auth failures (signup):** Chrome / Apple Events — surface CLI error; do not invent tokens.
-- **Auth failures (cloner):** invalid/expired Open API tokens — surface cloner exit error.
-- **False failure trap:** `201 Created` is signup success (already handled in CLI).
-
-## Slack slash command (future)
-
-1. Collect the six signup fields **plus** clone-from / clone-to bearer tokens (or equivalent).
-2. Reuse signup body + success copy; then invoke cloner with those tokens.
-3. **Do not** use Chrome AppleScript in Slack for Admin auth.
-4. Until Slack auth exists, local `demo-init` remains the supported runner.
+- Signup `200`/`201` → check-email message → cloner →  
+  `✅ demo-init completed — account created and cloner finished.`
+- Do not dump full signup JSON unless asked / `--verbose`.
 
 ## Agent checklist
 
 ```
-- [ ] Prerequisites confirmed (Chrome Okta + Apple Events)
-- [ ] Six signup fields collected
-- [ ] Ran demo-init through signup success + check-email message
-- [ ] Reminded user to verify email / obtain new-account Open API token
-- [ ] Clone-from + new-account bearer tokens collected
-- [ ] Cloner completed (or error reported)
+- [ ] CORE_* present in .env
+- [ ] Chrome Okta + Apple Events
+- [ ] Signup fields collected
+- [ ] Check-email reminder shown
+- [ ] New account client ID + secret collected
+- [ ] Cloner finished / error reported
 ```
