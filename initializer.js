@@ -269,6 +269,11 @@ async function main() {
         }
       }
       console.log(`\nPlease check ${email} to verify and finalise the account setup process.`);
+      console.log('\nThen, once logged into the new account in Guesty:');
+      console.log('  1. Open Developer tools');
+      console.log('  2. Go to OAuth applications');
+      console.log('  3. Create a new application and copy the client ID and client secret');
+      console.log('     (the secret is only shown once — save it now).\n');
 
       if (!process.env.CORE_CLIENT_ID || !process.env.CORE_CLIENT_SECRET) {
         throw new Error(
@@ -276,12 +281,9 @@ async function main() {
         );
       }
 
-      console.log('\n--- Clone listings into the new account ---');
+      console.log('--- Clone listings into the new account ---');
       console.log(
-        'Core (clone-from) uses CORE_CLIENT_ID / CORE_CLIENT_SECRET from .env; bearer tokens are fetched and cached under the hood (12h).'
-      );
-      console.log(
-        'After email verification, create an Open API app on the new account and paste its client credentials.\n'
+        'Core (clone-from) uses CORE_CLIENT_ID / CORE_CLIENT_SECRET from .env; bearer tokens are fetched and cached under the hood (12h).\n'
       );
       const demoClientId = await promptRequired(rl, 'New account client ID');
       const demoClientSecret = await promptRequired(rl, 'New account client secret');

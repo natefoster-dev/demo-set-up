@@ -65,16 +65,16 @@ End-to-end prompts:
 8. **New account client ID**  
 9. **New account client secret**
 
-On signup success (`200` or `201`), the CLI prints a short summary and:
+On signup success (`200` or `201`), the CLI prints a short summary and asks you to check email to verify and finalise setup. It also instructs you to, once logged into the new account:
 
-```
-Please check {email} to verify and finalise the account setup process.
-```
+1. Open **Developer tools**
+2. Go to **OAuth applications**
+3. Create a new application and copy the **client ID** and **client secret** (secret is shown once)
 
-Then it asks for the new account’s Open API client ID/secret and runs `cloner.js`.
+Then paste those credentials when prompted so the cloner can run.
 
 - **Core (clone-from):** always `CORE_CLIENT_ID` / `CORE_CLIENT_SECRET` from `.env` — no prompt.  
-- **Target (new account):** paste client ID + secret after you verify email and create an Open API app.  
+- **Target (new account):** client ID + secret from the steps above.  
 - Bearer tokens for both are obtained via `POST https://open-api.guesty.com/oauth2/token` and reused from local cache for **12 hours**.
 
 ```bash

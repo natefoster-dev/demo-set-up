@@ -34,8 +34,9 @@ listings/reservations via `cloner.js`.
 
 **Not prompted:** Core credentials (`.env`), phone/`INDIVIDUAL`/vat/`IL`/`Tel Aviv-Yafo`.
 
-After check-email: user must verify email and create an Open API app on the new
-account before pasting client ID/secret.
+After check-email: remind the user to verify email, log into the new account, open
+**Developer tools → OAuth applications**, create an application, and copy the
+client ID and client secret (secret shown once) before pasting them at the prompts.
 
 ## Auth model (cloner)
 
