@@ -329,25 +329,30 @@ async function runSandboxSetup() {
                     const remainingSixDigits = faker.string.numeric(6);
                     const cleanPhoneString = `+1${chosenAreaCode}${exchangeCodeFirstDigit}${remainingSixDigits}`;
 
+                    // Same booking loop; create via Reservations Open API v3 (POST /reservations is deprecated)
                     const reservationPayload = {
                         listingId: newListingId,
                         checkInDateLocalized: dates.checkIn,
                         checkOutDateLocalized: dates.checkOut,
-                        status: "confirmed",
-                        money: {
-                            currency: listingPayload.prices.currency,
-                            fareAccommodation: (listingPayload.prices.basePrice) * dates.lengthOfStay
+                        status: 'confirmed',
+                        source: 'manual',
+                        guestsCount: 1,
+                        numberOfGuests: {
+                            numberOfAdults: 1,
                         },
+                        accommodationFare:
+                            (listingPayload.prices.basePrice) * dates.lengthOfStay,
                         guest: {
                             firstName: guestFirstName,
                             lastName: guestLastName,
                             email: faker.internet.email({ firstName: guestFirstName, lastName: guestLastName }),
-                            phone: cleanPhoneString
-                        }
+                            phones: [cleanPhoneString],
+                        },
                     };
 
-                    const res = await demoClient.post('/reservations', reservationPayload);
-                    console.log(`   📌 [Res ${r + 1}/${reservationsPerListing}] Booked: ${res.data._id} (${dates.checkIn} to ${dates.checkOut}, ${dates.lengthOfStay} nights)`);
+                    const res = await demoClient.post('/reservations-v3', reservationPayload);
+                    const reservationId = res.data.reservationId || res.data._id;
+                    console.log(`   📌 [Res ${r + 1}/${reservationsPerListing}] Booked: ${reservationId} (${dates.checkIn} to ${dates.checkOut}, ${dates.lengthOfStay} nights)`);
 
                     const checkoutDateObj = new Date(dates.checkOut);
                     const randomCleaningGap = faker.number.int({ min: 1, max: 3 });
@@ -372,6 +377,7 @@ async function runSandboxSetup() {
         } else {
             console.error(error.message);
         }
+        process.exitCode = 1;
     }
 }
 
